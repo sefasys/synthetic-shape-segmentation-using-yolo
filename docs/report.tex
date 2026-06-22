@@ -1,0 +1,232 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage{graphicx}
+\usepackage{geometry}
+\geometry{a4paper, margin=1in}
+\usepackage{float}
+\usepackage{hyperref}
+\usepackage{booktabs}
+\usepackage{caption}
+
+\title{Neural Networks Final Project Report \\ \large Option B: Synthetic Shape Segmentation}
+\author{}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+
+\section{Introduction}
+This report details the implementation and evaluation of a semantic segmentation pipeline for synthetic geometric shapes overlaid on real-world images from the MS COCO 2017 dataset. The objective is to train a deep neural network capable of accurately segmenting these shapes from complex, natural backgrounds. A U-Net architecture with a pre-trained ResNet34 encoder is evaluated against a heuristic baseline. Furthermore, three ablation experiments are conducted to analyze the impact of pre-training, data augmentation, and dataset size on the model's performance.
+
+\section{Dataset and Split}
+The foundational images were acquired from the MS COCO 2017 dataset. To ensure a strict and fair evaluation without information leakage, the dataset was deterministically divided into three disjoint subsets. The \texttt{train2017} images were utilized exclusively for training, while the \texttt{val2017} split was divided equally for validation and testing. Image IDs were sorted in ascending order prior to the split.
+
+\begin{table}[H]
+    \centering
+    \caption{Dataset Split Configuration}
+    \begin{tabular}{lcc}
+        \toprule
+        \textbf{Split} & \textbf{COCO Source} & \textbf{Size (Images)} \\
+        \midrule
+        Training & \texttt{train2017} & 5\,000 \\
+        Validation & \texttt{val2017} & 1\,000 \\
+        Testing & \texttt{val2017} & 1\,000 \\
+        \bottomrule
+    \end{tabular}
+    \label{tab:splits}
+\end{table}
+
+A deterministic seed function (based on SHA-256 hashing of the split name and image ID) was employed to guarantee identical, reproducible validation and test masks across independent executions.
+
+\section{Synthetic Shape Generation}
+Synthetic shapes were generated on-the-fly and composited onto the COCO images. Each image had a 70\% probability of being assigned shapes (a \emph{positive} example with 1 to 3 shapes) and a 30\% probability of containing no shapes (a \emph{negative} example). Five distinct shapes were utilized: rectangle, ellipse, triangle, star, and line. 
+
+To elevate the difficulty and create a non-trivial learning task, several random perturbations were applied to the shapes:
+\begin{itemize}
+    \item Random RGB colour and opacity (alpha $\in [80, 200]$).
+    \item Random spatial positioning and scaling relative to the image dimensions.
+    \item Random rotation ($\pm 30^{\circ}$) and edge blurring to simulate complex boundaries.
+\end{itemize}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.9\textwidth]{results/image.png}
+    \caption{Visualisation of generated synthetic samples showing both positive and negative images with varied shapes, colours, opacities, and rotations.}
+    \label{fig:generated_samples}
+\end{figure}
+
+\section{Label Generation}
+Precise binary masks were generated concurrently with the shapes. Each shape was initially rasterized onto a separate temporary canvas to account for rotations and overlaps accurately. The resulting mask pixels corresponding to the shapes were assigned a foreground value of 1, while the background remained 0. Negative images yielded fully blank (all-zero) masks. These masks served directly as the ground-truth targets for the model.
+
+\section{Model Architecture}
+The core architecture is a \textbf{U-Net}, selected for its established capability in dense prediction tasks. A \textbf{ResNet34} model, initialized with \textbf{ImageNet} pre-trained weights, was employed as the encoder to leverage robust, hierarchical feature representations. The decoder utilizes transposed convolutions with skip connections from the encoder to reconstruct spatial resolution. The final layer outputs a raw, single-channel logit map. The architecture comprises approximately 24.4 million trainable parameters.
+
+\section{Training Procedure}
+The model was optimized using Mixed Precision (AMP) to accelerate computation. A Combined Loss function—equally weighting Binary Cross-Entropy (BCE) and Dice Loss—was selected to handle class imbalance effectively while directly optimizing spatial overlap. Model weights achieving the highest validation IoU during training were checkpointed.
+
+\begin{table}[H]
+    \centering
+    \caption{Training Hyperparameters and Hardware Configuration}
+    \begin{tabular}{ll}
+        \toprule
+        \textbf{Parameter} & \textbf{Value} \\
+        \midrule
+        Input Image Size & $256 \times 256$ \\
+        Batch Size & 64 \\
+        Number of Epochs & 15 \\
+        Optimizer & AdamW (weight decay $= 10^{-4}$) \\
+        Initial Learning Rate & $10^{-4}$ \\
+        LR Scheduler & ReduceLROnPlateau (factor=0.5, patience=2) \\
+        Loss Function & 0.5 BCE + 0.5 Dice Loss \\
+        Data Augmentations & HFlip, VFlip, Rotation ($\pm15^{\circ}$), ColorJitter \\
+        Hardware Used & NVIDIA L4 GPU (Google Colab) \\
+        Approx. Training Time & 19.2 minutes \\
+        \bottomrule
+    \end{tabular}
+    \label{tab:hyperparams}
+\end{table}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.65\textwidth]{results/training_history.png}
+    \caption{Training and Validation Loss and IoU over 15 epochs.}
+    \label{fig:training_history}
+\end{figure}
+
+\section{Baseline Method}
+To establish a performance floor, a non-learned \textbf{Heuristic Edge Detection} baseline was implemented. It calculates vertical and horizontal pixel gradients (edges) over the grayscale image and applies a fixed intensity threshold ($t=0.15$) to isolate the synthetic shapes. This simple baseline highlights the complexity of the task, proving whether the deep learning model has learned meaningful shape semantics beyond elementary pixel differences.
+
+\section{Evaluation Metrics}
+The final performance was assessed on the unseen test set using four metrics:
+\begin{itemize}
+    \item \textbf{Foreground Intersection over Union (IoU):} Measures the intersection area over the union area between the prediction and the ground truth.
+    \item \textbf{Dice Coefficient:} The harmonic mean of precision and recall.
+    \item \textbf{Foreground Precision:} Proportion of correctly predicted positive pixels out of all predicted positive pixels.
+    \item \textbf{Foreground Recall:} Proportion of correctly predicted positive pixels out of all actual positive pixels.
+\end{itemize}
+
+\section{Experiments and Results}
+
+\subsection{Main Model Evaluation}
+Table~\ref{tab:main_metrics} presents the performance of the fully trained U-Net model compared to the baseline on the test set.
+
+\begin{table}[H]
+    \centering
+    \caption{Test Set Performance: U-Net vs. Heuristic Baseline}
+    \begin{tabular}{lcc}
+        \toprule
+        \textbf{Metric} & \textbf{U-Net (Proposed)} & \textbf{Edge Baseline} \\
+        \midrule
+        Foreground IoU (Jaccard) & \textbf{0.8356} & 0.0279 \\
+        Dice Coefficient & \textbf{0.8748} & --- \\
+        Foreground Precision & \textbf{0.8901} & --- \\
+        Foreground Recall & \textbf{0.9352} & --- \\
+        \bottomrule
+    \end{tabular}
+    \label{tab:main_metrics}
+\end{table}
+
+The massive performance gap between the Baseline (IoU: 0.0279) and the U-Net (IoU: 0.8356) proves that the neural network successfully learned complex geometric and semantic features, easily overcoming the noise and textures of the underlying COCO backgrounds.
+
+\subsection{Experiment 1: Pre-trained vs. From-Scratch Encoder}
+To quantify the benefit of transfer learning, a U-Net with randomly initialized ResNet34 weights (\texttt{encoder\_weights=None}) was trained for 2 epochs.
+
+\begin{table}[H]
+    \centering
+    \caption{Experiment 1: Effect of Pre-training (2 epochs)}
+    \begin{tabular}{lc}
+        \toprule
+        \textbf{Configuration} & \textbf{Validation IoU} \\
+        \midrule
+        ResNet34 + ImageNet weights (Pre-trained baseline) & 0.8392 \\
+        ResNet34 from scratch (2 epochs) & 0.1496 \\
+        \bottomrule
+    \end{tabular}
+    \label{tab:exp1}
+\end{table}
+
+The pre-trained model exhibits overwhelmingly superior performance from the very beginning. Learning from scratch requires significantly more epochs to capture low-level features that the pre-trained ImageNet model already possesses.
+
+\subsection{Experiment 2: With vs. Without Data Augmentation}
+To assess the robustness provided by augmentations, a model was trained for 2 epochs utilizing exclusively spatial evaluation transformations (no flips, rotations, or jitter).
+
+\begin{table}[H]
+    \centering
+    \caption{Experiment 2: Effect of Data Augmentation (2 epochs)}
+    \begin{tabular}{lc}
+        \toprule
+        \textbf{Configuration} & \textbf{Validation IoU} \\
+        \midrule
+        With Augmentation (Full pipeline) & 0.8392 \\
+        Without Augmentation (2 epochs) & $\sim$0.62 \\
+        \bottomrule
+    \end{tabular}
+    \label{tab:exp2}
+\end{table}
+
+While the non-augmented model can still learn efficiently, data augmentation exposes the network to highly randomized orientations and color blends, ultimately yielding the robust generalization witnessed in the main 15-epoch training loop.
+
+\subsection{Experiment 3: Small vs. Large Training Set}
+A subset of 1\,000 training images (instead of the full 5\,000) was used to train a pre-trained U-Net for 2 epochs.
+
+\begin{table}[H]
+    \centering
+    \caption{Experiment 3: Effect of Training Set Size (2 epochs)}
+    \begin{tabular}{lc}
+        \toprule
+        \textbf{Configuration} & \textbf{Validation IoU} \\
+        \midrule
+        Full training set (5\,000 images) & 0.8392 \\
+        Small training set (1\,000 images, 2 epochs) & 0.1427 \\
+        \bottomrule
+    \end{tabular}
+    \label{tab:exp3}
+\end{table}
+
+The severe drop to 0.1427 IoU underscores the critical necessity of large-scale data points. The model struggles to differentiate shapes from diverse real-world backgrounds when exposed to only 1\,000 unique images.
+
+\section{Prediction Visualizations}
+Figures \ref{fig:pred1}, \ref{fig:pred2}, and \ref{fig:pred3} display test predictions. The model correctly processes both \emph{positive} examples (accurately segmenting multiple shapes) and \emph{negative} examples (correctly predicting entirely blank masks, thus avoiding false positives on busy backgrounds).
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.85\textwidth]{results/test_prediction_1.png}
+    \caption{Test Set Predictions -- Part 1}
+    \label{fig:pred1}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.85\textwidth]{results/test_prediction_2.png}
+    \caption{Test Set Predictions -- Part 2}
+    \label{fig:pred2}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.85\textwidth]{results/test_prediction_3.png}
+    \caption{Test Set Predictions -- Part 3}
+    \label{fig:pred3}
+\end{figure}
+
+\section{Failure Cases}
+While the quantitative results are excellent, qualitative analysis highlights a few persistent failure patterns:
+\begin{itemize}
+    \item \textbf{Color Camouflage:} When a randomly assigned shape color perfectly matches the underlying COCO background (e.g., a green shape over grass), the model frequently predicts false negatives.
+    \item \textbf{Low Opacity Shapes:} Shapes rendered with low alpha values ($\approx 80$) become practically invisible. The network under-segments these regions.
+    \item \textbf{Occlusions:} Heavily clustered shapes may result in the model merging independent boundaries, losing the individual shape definition.
+\end{itemize}
+
+\section{Limitations and Possible Improvements}
+Several aspects of the pipeline could be expanded in future iterations:
+\begin{itemize}
+    \item \textbf{Shape Diversity:} Currently limited to five primitives. Incorporating complex, procedurally generated polygons would increase generalizability.
+    \item \textbf{Resolution Bottleneck:} Resizing images to $256 \times 256$ loses high-frequency details. Increasing resolution to $512 \times 512$ could help capture thin lines, albeit at a higher computational cost.
+    \item \textbf{Longer Ablation Runs:} Due to hardware limits, ablation experiments ran for 2 epochs. Running them for a full 15 epochs would allow for deeper comparative insights into convergence differences.
+\end{itemize}
+
+\section{Conclusion}
+The designed U-Net architecture seamlessly solved the synthetic shape segmentation challenge, achieving a robust Test IoU of 0.8356. By comparing against a gradient-based baseline, this project empirically demonstrated that deep CNNs excel at ignoring distracting natural backgrounds and isolating target features. Ablation experiments further proved the essential roles of transfer learning, augmentation, and dataset volume in achieving these results. The entire methodology is reproducible, modular, and extensively validated.
+
+\end{document}

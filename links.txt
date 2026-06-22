@@ -1,0 +1,11 @@
+CENG428 - Synthetic Shape Semantic Segmentation
+Student: Mustafa Sefa Soysal / 23050111037
+
+1) Public link to ZIP file for Train & Test data images (created via 1_Data_Creation.ipynb):
+https://drive.google.com/file/d/1JRQvuEhnQlD7qT7Er10ZAnIC7fyogNwH/view?usp=drive_link
+
+2) Public link to the Model File (best_segmentation_model.pth, created via 2_Model_Training.ipynb):
+https://drive.google.com/file/d/1JFwlv2CeHwWbOz762XXJaFgRbjbEe8EO/view?usp=drive_link
+
+---
+Note: To obtain the dataset zip, run the `1_Data_Creation.ipynb` notebook in Colab. The notebook will automatically generate `synthetic_dataset.zip` which you can download and upload to your Drive. Similarly, the model file is automatically saved during `2_Model_Training.ipynb`.

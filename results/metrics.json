@@ -1,0 +1,6 @@
+{
+    "Test_Foreground_IoU_Jaccard": 0.8355922102928162,
+    "Test_Dice_Coefficient": 0.8747785091400146,
+    "Test_Foreground_Precision": 0.8901333212852478,
+    "Test_Foreground_Recall": 0.9352170825004578
+}
