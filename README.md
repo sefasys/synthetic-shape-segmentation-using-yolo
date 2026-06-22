@@ -73,3 +73,4 @@ The U-Net model successfully learned to isolate synthetic shapes from complex re
 
 Detailed visual analyses, including failure cases (color camouflaging and occlusions), are documented in the accompanying PDF report.
 
+# synthetic-shape-segmentation-using-yolo
