@@ -1,4 +1,4 @@
-# Neural Networks Practice Exam: Synthetic Shape Segmentation 
+# Synthetic Shape Segmentation 
 
 This repository contains the complete implementation for the "Synthetic Shape Segmentation" practice exam. The objective of this project is to train a neural network (U-Net) to detect and segment synthetically generated geometric shapes overlaid onto real-world images from the MS COCO 2017 dataset.
 
