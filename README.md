@@ -1,4 +1,4 @@
-# Neural Networks Practice Exam: Synthetic Shape Segmentation (Option B)
+# Neural Networks Practice Exam: Synthetic Shape Segmentation 
 
 This repository contains the complete implementation for the "Synthetic Shape Segmentation" practice exam. The objective of this project is to train a neural network (U-Net) to detect and segment synthetically generated geometric shapes overlaid onto real-world images from the MS COCO 2017 dataset.
 
@@ -72,5 +72,3 @@ The U-Net model successfully learned to isolate synthetic shapes from complex re
 | **Recall** | 0.9352 | --- |
 
 Detailed visual analyses, including failure cases (color camouflaging and occlusions), are documented in the accompanying PDF report.
-
-# synthetic-shape-segmentation-using-yolo
